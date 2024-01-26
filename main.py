@@ -42,8 +42,8 @@ def extract_config(path_to_config, fail_on_error, latest_config=None) -> ConfigH
         tokens = [web3.Web3.to_checksum_address(t) for t in config['tokens']]
         recipients = [(web3.Web3.to_checksum_address(r['address']), float(r['amount'])) for r in config['recipients']]
         total_pct = sum(map(lambda x: x[1], recipients))
-        if total_pct > 100.0:
-            raise Exception("recipients % > 100: " + total_pct)
+        if total_pct != 100.0:
+            raise Exception("recipients %: 100 != " + total_pct)
         return ConfigHolder(provider,
                             config['private_key'],
                             vesting,
@@ -87,8 +87,14 @@ def do_work_for_token(provider: web3.Web3, private_key: str, vesting: str, token
         print("Nothing to send for token: {}, balance: {} = 0".format(token, owner))
         return
     give_inf_approve(provider, private_key, vesting, token)
-    tokens_to_send = [(r_a, int(balance * r_p / 100), r_p) for r_a, r_p in recipients]
+    tokens_to_send = [[r_a, int(balance * r_p / 100), r_p] for r_a, r_p in recipients]
     tokens_to_send = list(filter(lambda x: x[1] != 0, tokens_to_send))
+
+    # correct process latest
+    if len(tokens_to_send) > 1:
+        amount_all_except_first = sum(map(lambda x: x[1], tokens_to_send[1:]))
+        tokens_to_send[0][1] = balance - amount_all_except_first
+
     if len(tokens_to_send) == 0:
         print("Nothing to send for token: {}, empty recipients".format(token))
         return
