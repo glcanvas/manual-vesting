@@ -15,8 +15,18 @@ def send_transaction(web3_connector, function_call, private_key):
 
 
 def __wait_till_transaction_minted(web3_connector, tx_hash):
+    cnt = 0
     while True:
-        status = web3_connector.eth.get_transaction(tx_hash)
+        cnt += 1
+        try:
+            status = web3_connector.eth.get_transaction(tx_hash)
+        except:
+            if cnt >= 5:
+                print("No info about transaction, skip")
+                break
+            print("Failed to get transaction, wait a bit")
+            time.sleep(2)
+            continue
         time.sleep(1)
         if status['blockNumber'] is not None and status['blockNumber'] != 0:
             print("Transaction minted: {}".format(tx_hash))
