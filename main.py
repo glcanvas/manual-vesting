@@ -1,15 +1,17 @@
-import json
-import sys
-import time
 import argparse
+import json
 import os
+import time
+from typing import List
 
 import web3 as web3
+from loguru import logger
 from web3.middleware import geth_poa_middleware
 
-from dataclasses import dataclass
-
 import utils
+from excel_parser import parse_excel
+from models.config_holder import ConfigHolder
+from models.recipient import Recipient
 
 # 2**256-1
 UINT_256_MAX = 115792089237316195423570985008687907853269984665640564039457584007913129639935
@@ -21,111 +23,144 @@ with open(os.path.join(folder_path, "abi", "ERC20.json"), "r") as f:
     erc_20_abi = json.load(f)
 
 
-@dataclass
-class ConfigHolder:
-    provider: web3.Web3
-    private_key: str
-    vesting: str
-    tokens: list
-    recipients: list
+def get_config():
+    with open('./configs.json', "r") as f:
+        return json.load(f)
 
 
-def extract_config(path_to_config, fail_on_error, latest_config=None) -> ConfigHolder:
+def extract_config(fail_on_error, token_address, latest_config=None) -> ConfigHolder:
     try:
-        with open(path_to_config, "r") as f:
-            config = json.load(f)
+        config = get_config()
+        logger.info("Extracting config data")
         web3.Account.from_key(config['private_key'])
-        provider = web3.Web3(web3.HTTPProvider(config['provider']))
+        current_chain_name = config['current_chain_name']
+        providers = config['providers']
+        provider_url = providers.get(current_chain_name, None)
+        provider = web3.Web3(web3.HTTPProvider(provider_url))
         provider.middleware_onion.inject(geth_poa_middleware, layer=0)
-        vesting = web3.Web3.to_checksum_address(config['vesting'])
-        provider.eth.get_balance(vesting)
-        tokens = [web3.Web3.to_checksum_address(t) for t in config['tokens']]
-        recipients = [(web3.Web3.to_checksum_address(r['address']), float(r['amount'])) for r in config['recipients']]
-        total_pct = sum(map(lambda x: x[1], recipients))
-        if total_pct != 100.0:
-            raise Exception("recipients %: 100 != " + total_pct)
-        return ConfigHolder(provider,
-                            config['private_key'],
-                            vesting,
-                            tokens,
-                            recipients
-                            )
+        vesting_addresses = config['vesting_addresses']
+        vesting_address = vesting_addresses.get(current_chain_name, None)
+        vesting = web3.Web3.to_checksum_address(vesting_address)
+        token = web3.Web3.to_checksum_address(token_address)
+        recipients = parse_excel('./data/addresses.xlsx')
+
+        logger.success("Config extracted")
+
+        return ConfigHolder(
+            provider,
+            config['private_key'],
+            vesting,
+            token,
+            recipients
+        )
 
     except Exception as e:
-        print("Exception happened", e)
+        logger.error("Exception happened")
         if fail_on_error:
-            print("Fail on invalid config")
+            logger.error("Fail on invalid config")
             raise e
         if latest_config is None:
-            print("Initial config invalid, fail")
+            logger.error("Initial config invalid, fail")
             raise e
         return latest_config
 
 
 def give_inf_approve(provider: web3.Web3, private_key: str, vesting: str, token: str):
+    logger.info("Start giving aproove...")
     owner = web3.Account.from_key(private_key).address
     erc20 = provider.eth.contract(address=token, abi=erc_20_abi)
     balance = erc20.functions.balanceOf(owner).call({"from": owner})
+
     if balance == 0:
         return
+
     allowance = erc20.functions.allowance(owner, vesting)
     allowance_balance = allowance.call({"from": owner})
+
     if allowance_balance >= balance:
+        logger.info("Allowance_balance is more than balance")
         return
+
     if allowance_balance != 0:
-        print("Send Zero approve")
+        logger.info("Send Zero approve")
         utils.send_transaction(provider, erc20.functions.approve(owner, vesting, 0), private_key)
-    print("Send Max approve")
+
+    logger.info("Send Max approve")
     utils.send_transaction(provider, erc20.functions.approve(vesting, UINT_256_MAX), private_key)
 
 
-def do_work_for_token(provider: web3.Web3, private_key: str, vesting: str, token: str, recipients: list):
+def do_work_for_token(provider: web3.Web3, private_key: str, vesting: str, token: str, recipients: List[Recipient]):
     owner = web3.Account.from_key(private_key).address
     erc20 = provider.eth.contract(address=token, abi=erc_20_abi)
-    balance = erc20.functions.balanceOf(owner).call({"from": owner})
-    if balance == 0:
-        print("Nothing to send for token: {}, balance: {} = 0".format(token, owner))
+
+    balance_in_wei = erc20.functions.balanceOf(owner).call({"from": owner})
+    symbol = erc20.functions.symbol().call({"from": owner})
+    decimals = erc20.functions.decimals().call({"from": owner})
+    balance = balance_in_wei / (10 ** decimals)
+
+    logger.info(f'Current balance: wei: {balance_in_wei}, real: {balance} {symbol}')
+
+    if balance_in_wei == 0:
+        logger.error(f"Nothing to send for token: {token}, balance: {owner} = 0")
         return
+
     give_inf_approve(provider, private_key, vesting, token)
-    tokens_to_send = [[r_a, int(balance * r_p / 100), r_p] for r_a, r_p in recipients]
-    tokens_to_send = list(filter(lambda x: x[1] != 0, tokens_to_send))
+    addresses = [recipient.address for recipient in recipients]
+    amounts = [int(float(recipient.amount) * 10 ** decimals) for recipient in recipients]
+    desired_sum_in_wei = sum(float(amount) for amount in amounts)
+    desired_sum = sum(float(recipient.amount) for recipient in recipients)
+    remaining_balance_in_wei = balance_in_wei - desired_sum_in_wei
+    remaining_balance = balance - desired_sum
 
-    # correct process latest
-    if len(tokens_to_send) > 1:
-        amount_all_except_first = sum(map(lambda x: x[1], tokens_to_send[1:]))
-        tokens_to_send[0][1] = balance - amount_all_except_first
-
-    if len(tokens_to_send) == 0:
-        print("Nothing to send for token: {}, empty recipients".format(token))
+    if desired_sum_in_wei == 0:
+        logger.error(f"Nothing to send for token: {token}, empty recipients")
         return
-    print("Distribution")
-    for a, b, p in tokens_to_send:
-        print("{} -> {}, {}%".format(a, b, p))
+
+    # Проверка баланса с учетом decimals
+    if desired_sum_in_wei > balance_in_wei:
+        logger.error(
+            f"Insufficient balance for token {token}. Required in wei: {desired_sum_in_wei}, Available: {balance_in_wei}"
+        )
+        return
+
+    logger.info("Distribution")
+    logger.info(f"Desired amount: wei = {desired_sum_in_wei}, real = {desired_sum} {symbol}")
+    logger.info(
+        f"Remaining balance after distribution: wei = {remaining_balance_in_wei}, real = {remaining_balance} {symbol}"
+    )
+
+    logger.info(f'Data: ')
+    for index, address in enumerate(addresses):
+        amount_in_wei = amounts[index]
+        amount = amount_in_wei / (10 ** decimals)
+        logger.info(f'recipient: {address}, amount: wei = {amount_in_wei}, real = {amount} {symbol}')
 
     vesting_contract = provider.eth.contract(address=vesting, abi=vesting_abi)
-    f = vesting_contract.functions.distributeRewards(token,
-                                                     [i for i, _, _ in tokens_to_send],
-                                                     [i for _, i, _ in tokens_to_send])
+    f = vesting_contract.functions.distributeRewards(
+        token,
+        addresses,
+        amounts
+    )
     utils.send_transaction(provider, f, private_key)
-    print("Distributed for token: {}".format(token))
+    logger.success(f"Distribution succeeded for token = {token}")
 
 
-def do_work(config_path, fail_on_error, h: ConfigHolder):
+def do_work(fail_on_error, h: ConfigHolder):
     while True:
-        print("Start do work...")
-        for t in h.tokens:
-            do_work_for_token(h.provider, h.private_key, h.vesting, t, h.recipients)
-        h = extract_config(config_path, fail_on_error, h)
-        print("Processed all tokens, wait 10 seconds")
+        logger.info("Start do work...")
+        do_work_for_token(h.provider, h.private_key, h.vesting, h.token, h.recipients)
+        logger.success("Processed all tokens, sleeping 10 seconds")
+        h = extract_config(fail_on_error, h.token, h)
         time.sleep(10)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--path-to-config")
+    parser.add_argument("-t", "--token-address")
     parser.add_argument("-f", "--fail-on-error", action=argparse.BooleanOptionalAction)
-    parser.parse_args()
-
     params = parser.parse_args()
-    h = extract_config(params.path_to_config, params.fail_on_error, None)
-    do_work(params.path_to_config, params.fail_on_error, h)
+    fail_on_error = params.fail_on_error
+    token_address = params.token_address
+    configHolder = extract_config(fail_on_error, token_address, None)
+    do_work(fail_on_error, configHolder)
+    logger.success("Done!")
