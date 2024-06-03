@@ -26,14 +26,16 @@ def deploy_contract(path_to_bytecode, path_to_abi, private_key):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--path-to-config")
     parser.add_argument("--vesting", action=argparse.BooleanOptionalAction)
     parser.add_argument("--test", action=argparse.BooleanOptionalAction)
     params = parser.parse_args()
     with open('./configs.json', "r") as f:
         config = json.load(f)
 
-    provider = web3.Web3(web3.HTTPProvider(config['provider']))
+    current_chain_name = config['current_chain_name']
+    providers = config['providers']
+    provider_url = providers.get(current_chain_name, None)
+    provider = web3.Web3(web3.HTTPProvider(provider_url))
     provider.middleware_onion.inject(geth_poa_middleware, layer=0)
 
     pk = config['private_key']
