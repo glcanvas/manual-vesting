@@ -1,22 +1,5 @@
 {
-  "provider": "https://bsc-testnet.blockpi.network/v1/rpc/public",
+  "provider": "https://api.avax-test.network/ext/bc/C/rpc",
   "private_key": "your own",
-  "vesting": "0xBAfF128052Eb8CF0132f55047A2c5D5B5fc27540",
-  "tokens": [
-    "0x415A1fF080fe1b138294F29579052908345d229B"
-  ],
-  "recipients": [
-    {
-      "address": "0xaBd8721A848BA29F08E0Ab48E596568Aef207bA4",
-      "amount": "97"
-    },
-    {
-      "address": "0x3101f22eF7aE6F3eC6b2A5a70935985efF5A1747",
-      "amount": "2"
-    },
-    {
-      "address": "0xde4ccaffb2230ac97ba80b2e40649625d07c9f17",
-      "amount": "1"
-    }
-  ]
+  "vesting": "0xeBFdbD0ef502AB2d9c007719b7a851b92487a93C"
 }
