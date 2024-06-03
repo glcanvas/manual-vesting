@@ -1,5 +1,28 @@
 {
-  "provider": "https://api.avax-test.network/ext/bc/C/rpc",
   "private_key": "your own",
-  "vesting": "0xeBFdbD0ef502AB2d9c007719b7a851b92487a93C"
+  "vesting_addresses": {
+    "BNB": "your BNB deploeyd vesting address",
+    "AVAX": "0xeBFdbD0ef502AB2d9c007719b7a851b92487a93C",
+    "ZK": "your ZK deploeyd vesting address",
+    "OPTIMISM": "your OPTIMISM deploeyd vesting address",
+    "ARBITRUM": "your ARBITRUM deploeyd vesting address",
+    "POLYGON": "your POLYGON deploeyd vesting address"
+  },
+  "providers": {
+    "BNB": "https://endpoints.omniatech.io/v1/bsc/testnet/public",
+    "AVAX": "https://api.avax-test.network/ext/bc/C/rpc",
+    "ZK": "https://endpoints.omniatech.io/v1/zksync-era/sepolia/public",
+    "OPTIMISM": "https://opt-goerli.g.alchemy.com/v2/demo",
+    "ARBITRUM": "https://sepolia-rollup.arbitrum.io/rpc",
+    "POLYGON": "https://polygon-mumbai.api.onfinality.io/public"
+  },
+  "chains": [
+    "BNB",
+    "AVAX",
+    "ZK",
+    "OPTIMISM",
+    "ARBITRUM",
+    "POLYGON"
+  ],
+  "current_chain_name": "AVAX"
 }

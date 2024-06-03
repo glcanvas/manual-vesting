@@ -33,9 +33,14 @@ def extract_config(fail_on_error, token_address, latest_config=None) -> ConfigHo
         config = get_config()
         logger.info("Extracting config data")
         web3.Account.from_key(config['private_key'])
-        provider = web3.Web3(web3.HTTPProvider(config['provider']))
+        current_chain_name = config['current_chain_name']
+        providers = config['providers']
+        provider_url = providers.get(current_chain_name, None)
+        provider = web3.Web3(web3.HTTPProvider(provider_url))
         provider.middleware_onion.inject(geth_poa_middleware, layer=0)
-        vesting = web3.Web3.to_checksum_address(config['vesting'])
+        vesting_addresses = config['vesting_addresses']
+        vesting_address = vesting_addresses.get(current_chain_name, None)
+        vesting = web3.Web3.to_checksum_address(vesting_address)
         token = web3.Web3.to_checksum_address(token_address)
         recipients = parse_excel('./data/addresses.xlsx')
 

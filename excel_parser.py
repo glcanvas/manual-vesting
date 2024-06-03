@@ -11,7 +11,7 @@ def parse_excel(file_path) -> List[Recipient]:
     df = pd.read_excel(file_path)
 
     if 'address' not in df.columns or 'count' not in df.columns:
-        raise ValueError("Excel file must contain 'web 3 address' and 'token count for address' columns")
+        raise ValueError("Excel file must contain 'address' and 'count' columns")
 
     data = []
     for index, row in df.iterrows():
