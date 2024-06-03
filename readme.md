@@ -2,14 +2,13 @@
 # How to run
 
 1) Задеплоить Vesting в сеть
-   * Выбрать rpc: configs -> provider
+   * Выбрать текущую сеть: configs -> current_chain_name
    * Ввести приватный ключ: configs -> private_key
-2) python ./deploy.py -p full/path/to/config.json --vesting
+2) python ./deploy.py --vesting
 3) После 2ого пункта получим адрес контракта vesting
-   * Добавить этот адрес в конфиг: configs -> vesting
-4) В config добавить список токенов в tokens
-5) Добавить список получателей в recipients -- надо указать 2 параметра: address, amount (1 -- адрес получателя, 2 -- процент от токенов для получения)
-6) python ./main.py -t "your token address" -f
+   * Добавить этот адрес в конфиг: configs -> vesting_addresses для текущей сети
+4) Добавить список получателей в addresses.xlsx -- надо указать 2 параметра: address, count (1 -- адрес получателя, 2 -- кол-во токенов для получения)
+5) python ./main.py -t "your token address" -f
    * -f -- падать на неверном конфиге или брать последний валидный
 
 Особенности:
